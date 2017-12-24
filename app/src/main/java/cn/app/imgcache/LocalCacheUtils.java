@@ -11,52 +11,48 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 
 /**
- * Created by Administrator on 2017/12/22.
+ * Created by jiangzehui on 17/12/23.
  */
 
 public class LocalCacheUtils {
+    private LruCacheUtils lruCacheUtils;
+    private final String path = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Img";
 
-    private final String CACHE_PATH = Environment.getExternalStorageDirectory().getAbsolutePath()+"/Img";
+    public LocalCacheUtils(LruCacheUtils lruCacheUtils){
+        this.lruCacheUtils = lruCacheUtils;
+    }
 
-    /**
-     * 缓存图片到本地
-     * @param url
-     * @param bitmap
-     */
-    public void setImgToLocal(String url, Bitmap bitmap){
-        String filename = MD5Encoder.encode(url);
-        File fileDic = new File(CACHE_PATH);
-        //通过得到文件的父文件
-        if(!fileDic.exists()){
+    //本地缓存
+    public void setImgToLocal(String url, Bitmap bitmap) {
+
+        File fileDic = new File(path);
+        if (!fileDic.exists()) {
             fileDic.mkdirs();
         }
-        File file = new File(fileDic.getAbsolutePath(),filename);
-        //把图片保存在本地
+        String filename = MD5Util.MD5(url);
+        File file = new File(fileDic.getAbsolutePath(), filename);
         try {
-            bitmap.compress(Bitmap.CompressFormat.JPEG,100,new FileOutputStream(file));
-            Log.d("MAIN","已缓存图片到本地");
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, new FileOutputStream(file));
+            Log.d("main", "图片缓存到本地成功");
         } catch (FileNotFoundException e) {
             e.printStackTrace();
         }
-
     }
 
-    /**
-     * 获取本地缓存的图片
-     * @param url
-     * @return
-     */
-    public Bitmap getImgFromLocal(String url){
-        String filename = MD5Encoder.encode(url);
-        File file = new File(CACHE_PATH,filename);
+    public Bitmap getImgFromLocal(String url) {
+        String filename = MD5Util.MD5(url);
+        File file = new File(path, filename);
+
         try {
-            Log.d("MAIN","从本地读取图片");
-            return BitmapFactory.decodeStream(new FileInputStream(file));
+            Bitmap bitmap = BitmapFactory.decodeStream(new FileInputStream(file));
+            if(bitmap != null){
+                lruCacheUtils.setImgToMemory(url,bitmap);
+            }
+            return bitmap;
         } catch (FileNotFoundException e) {
-            e.printStackTrace();
+            //e.printStackTrace();
+            return null;
         }
-        return null;
-
-
     }
+
 }

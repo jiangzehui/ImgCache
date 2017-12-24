@@ -5,103 +5,105 @@ import android.graphics.BitmapFactory;
 import android.os.AsyncTask;
 import android.util.Log;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
 /**
- * Created by Administrator on 2017/12/20.
+ * Created by jiangzehui on 17/12/19.
  */
 
 public class NetCacheUtils {
 
-    LocalCacheUtils localCacheUtils;
-    MenoryCacheUtils menoryCacheUtils;
-    public NetCacheUtils() {
-        localCacheUtils = new LocalCacheUtils();
-        menoryCacheUtils = new MenoryCacheUtils();
+    private LocalCacheUtils localCacheUtils;
+    private LruCacheUtils lruCacheUtils;
+
+
+    public NetCacheUtils(LocalCacheUtils localCacheUtils, LruCacheUtils lruCacheUtils){
+        this.localCacheUtils = localCacheUtils;
+        this.lruCacheUtils = lruCacheUtils;
     }
 
-    public void getImg(ImageView iv, String url){
-        new ImgTask().execute(iv,url);//启动多线程下载图片
+    public void getImgFromNet(ImageView iv,String url,ProgressBar pb){
+        new task().execute(iv,url,pb);
     }
 
-    /**
-     * AsyncTask就是对handler和线程池的封装
-     * 第一个泛型:参数类型
-     * 第二个泛型:更新进度的泛型
-     * 第三个泛型:onPostExecute的返回结果
-     */
-    class ImgTask extends AsyncTask<Object,Void,Bitmap>{
 
+
+    class task extends AsyncTask<Object, Object, Bitmap> {
         private ImageView iv;
         private String url;
+        private ProgressBar pb;
 
-        /**
-         * 耗时方法结束后执行该方法,主线程中
-         * @param bitmap
-         */
+
         @Override
-        protected void onPostExecute(Bitmap bitmap) {
-            super.onPostExecute(bitmap);
-            iv.setImageBitmap(bitmap);
-            Log.d("MAIN","从网络加载图片");
-            localCacheUtils.setImgToLocal(url,bitmap);
-            menoryCacheUtils.setBitmapToCache(url,bitmap);
-        }
-
-        /**
-         * 更新进度在主线程
-         * @param values
-         */
-        @Override
-        protected void onProgressUpdate(Void... values) {
-            super.onProgressUpdate(values);
-        }
-
-        /**
-         * 后台耗时操作，在子线程
-         * @param objects
-         * @return
-         */
-        @Override
-        protected Bitmap doInBackground(Object... objects) {
-            iv = (ImageView) objects[0];
-            url = (String) objects[1];
-            return domnLoadBitmap(url);
-        }
-
-        /**
-         * 下载图片
-         * @param url
-         * @return
-         */
-        private Bitmap domnLoadBitmap(String url){
-            HttpURLConnection connection = null;
+        protected Bitmap doInBackground(Object... params) {
+            iv = (ImageView) params[0];
+            url = (String) params[1];
+            pb = (ProgressBar) params[2];
             try {
-                connection = (HttpURLConnection) new URL(url).openConnection();
-                connection.setConnectTimeout(5000);
-                connection.setReadTimeout(5000);
+                HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
                 connection.setRequestMethod("GET");
+                connection.setReadTimeout(20000);
+                connection.setConnectTimeout(20000);
                 int code = connection.getResponseCode();
-                if(code == 200){
+                if (code == 200) {
+
+                    InputStream inputStream = connection.getInputStream();
+                    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                    byte[] b =new byte[1024];
+                    int len;//当前读取图片的长度
+                    int totalLength = connection.getContentLength();//获取内容总长度
+                    while ((len=inputStream.read(b))!=-1) {//不等于-1表示还没有读完
+                        bos.write(b,0,len);
+                        int progress = bos.size()*100/totalLength;
+                        publishProgress(progress);
+                        Log.d("MAIN","totalLength="+totalLength+", bos.size="+bos.size()+",progress="+progress);
+                    }
+                    b = bos.toByteArray();
+
                     BitmapFactory.Options options = new BitmapFactory.Options();
-                    options.inSampleSize = 2;//宽高压缩为原来的1/2
+                    options.inSampleSize = 2;//压缩为图片的2分之一
                     options.inPreferredConfig = Bitmap.Config.ARGB_8888;
-                    Bitmap bitmap = BitmapFactory.decodeStream(connection.getInputStream(),null,options);
+                    //Bitmap bitmap = BitmapFactory.decodeStream(connection.getInputStream(), null, options);
+                    Bitmap bitmap = BitmapFactory.decodeByteArray(b,0,b.length,options);
+                    Log.d("main", "图片从网络加载成功");
                     return bitmap;
+
+
                 }
-
-
             } catch (IOException e) {
                 e.printStackTrace();
-            } finally {
-                connection.disconnect();
             }
             return null;
 
+
         }
 
+        @Override
+        protected void onPostExecute(Bitmap s) {
+            super.onPostExecute(s);
+            iv.setImageBitmap(s);
+            localCacheUtils.setImgToLocal(url, s);
+            lruCacheUtils.setImgToMemory(url, s);
+
+        }
+
+        @Override
+        protected void onProgressUpdate(Object... values) {
+            super.onProgressUpdate(values);
+            int progress = (int) values[0];
+            if(pb!=null){
+                pb.setProgress(progress);
+            }
+        }
     }
+
+
+
 }
